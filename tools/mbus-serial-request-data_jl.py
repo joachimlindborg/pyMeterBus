@@ -34,21 +34,6 @@ def ping_address(ser, address, retries=5, read_echo=False):
 
     return False
 
-def do_many(args):
-    output_fp=None
-    with open(args.input,'r') as input_file:
-        if args.store:
-            with open(args.store,'w') as output_file:
-                for line in input_file:
-                    parts=line.split(';')
-                    args.address=parts[0]
-                    output_file.write(do_char_dev(args))
-        else:
-            for line in input_file:
-                parts=line.split(';')
-                args.address=parts[0]
-                do_char_dev(args)
-
 def do_reg_file(args):
     with open(args.device, 'rb') as f:
         frame = meterbus.load(f.read())
@@ -72,7 +57,7 @@ def do_char_dev(args):
                            inter_byte_timeout=ibt,
                            timeout=1) as ser:
             frame = None
-            result=None
+
             if meterbus.is_primary_address(address):
                 if ping_address(ser, address, args.retries, args.echofix):
                     meterbus.send_request_frame(ser, address, read_echo=args.echofix)
@@ -121,7 +106,6 @@ def do_char_dev(args):
                 }
 
                 if args.output == 'json':
-                    result=json.dumps(ydata, indent=4, sort_keys=True)
                     print(json.dumps(ydata, indent=4, sort_keys=True))
 
                 elif args.output == 'yaml':
@@ -137,13 +121,10 @@ def do_char_dev(args):
                     yaml.add_representer(float, float_representer)
                     yaml.add_representer(Decimal, float_representer)
 
-                    result=yaml.dump(ydata, default_flow_style=False, allow_unicode=True, encoding=None)
                     print(yaml.dump(ydata, default_flow_style=False, allow_unicode=True, encoding=None))
 
             elif frame is not None:
-                result=frame.to_JSON()
                 print(frame.to_JSON())
-            return result
 
     except serial.serialutil.SerialException as e:
         print(e)
@@ -168,26 +149,18 @@ if __name__ == '__main__':
                         help='Output format [dump,json,yaml]')
     parser.add_argument('--echofix', action='store_true',
                         help='Read and ignore echoed data from target')
-    parser.add_argument('-i', '--input', default=None,
-                        help='Filename of file with devices to readout')
-    parser.add_argument('-s', '--store', default=None,
-                        help='Filename of file to store output data in')
     parser.add_argument('device', type=str, help='Serial device, URI or binary file')
 
     args = parser.parse_args()
 
     meterbus.debug(args.d)
 
-    
     try:
         mode = os.stat(args.device).st_mode
         if stat.S_ISREG(mode):
             do_reg_file(args)
         else:
-            if args.input:
-                do_many(args)
-            else:
-                do_char_dev(args)
+            do_char_dev(args)
     except OSError:
         do_char_dev(args)
 

@@ -36,6 +36,7 @@ def init_slaves(ser, read_echo=False):
 
 def mbus_scan_secondary_address_range(ser, pos, mask, read_echo=False):
     # F character is a wildcard
+    found_devices=[]
     if mask[pos].upper() == 'F':
         l_start, l_end = 0, 9
     else:
@@ -49,11 +50,13 @@ def mbus_scan_secondary_address_range(ser, pos, mask, read_echo=False):
            new_mask = (mask[:pos] + "{0:1X}".format(i) + mask[pos+1:]).upper()
            val, match, manufacturer = mbus_probe_secondary_address(ser, new_mask, read_echo)
            if val == True:
+               found_devices.append((match, manufacturer, new_mask))
                print("Device found with id {0} ({1}), using mask {2}".format(
                    match, manufacturer, new_mask))
            elif val == False:  # Collision
                mbus_scan_secondary_address_range(ser, pos+1, new_mask, read_echo)
-
+    return found_devices
+    
 def mbus_probe_secondary_address(ser, mask, read_echo=False):
     # False -> Collison
     # None -> No reply
@@ -90,8 +93,12 @@ def main(args):
             # Ensure we are at the beginning of the records
             init_slaves(ser, args.echofix)
 
-            mbus_scan_secondary_address_range(ser, 0, args.address, args.echofix)
-
+            found_devices=mbus_scan_secondary_address_range(ser, 0, args.address, args.echofix)
+            if args.store:
+                with open(args.store,'w') as store_file:
+                    for match, manufacturer, new_mask in found_devices:
+                        store_file.write("{0};{1};{2}\n".format(match, manufacturer, new_mask))
+                    
     except serial.serialutil.SerialException as e:
         print(e)
 
@@ -111,12 +118,15 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--address',
                         type=sec_addr_valid, default="FFFFFFFFFFFFFFFF",
                         help='Secondary address mask')
+    parser.add_argument('-s','--store',type=str,default=None,
+                        help='Filename to store found devices in')
     # FIXME
     # parser.add_argument('-r', '--retries',
     #                     type=int, default=3,
     #                     help='Number of ping retries for each address')
     parser.add_argument('--echofix', action='store_true',
                         help='Read and ignore echoed data from target')
+    
     parser.add_argument('device', type=str, help='Serial device or URI')
 
     args = parser.parse_args()
